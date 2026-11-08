@@ -25,6 +25,43 @@ sealed record Tools(string Root, string Python)
     }
 }
 
+/// The build's processes (python, then the compiler it starts) as one Windows job object: Cancel ends them all together
+static class ProcessTree
+{
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    static extern IntPtr CreateJobObject(IntPtr attributes, string? name);
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool AssignProcessToJobObject(IntPtr job, IntPtr process);
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool TerminateJobObject(IntPtr job, uint exitCode);
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    static extern bool CloseHandle(IntPtr handle);
+
+    /// IntPtr.Zero when Windows would not make one (the caller then ends only the process it started)
+    public static IntPtr Create(Process p)
+    {
+        try
+        {
+            var job = CreateJobObject(IntPtr.Zero, null);
+            if (job == IntPtr.Zero) return IntPtr.Zero;
+            if (AssignProcessToJobObject(job, p.Handle)) return job;
+            CloseHandle(job);
+        }
+        catch (Exception) { }
+        return IntPtr.Zero;
+    }
+
+    public static void End(IntPtr job)
+    {
+        if (job != IntPtr.Zero) try { TerminateJobObject(job, 1); } catch (Exception) { }
+    }
+
+    public static void Release(IntPtr job)
+    {
+        if (job != IntPtr.Zero) try { CloseHandle(job); } catch (Exception) { }
+    }
+}
+
 /// A command line for a child process: each argument quoted the way Windows programs (and Python) read them back
 static class CommandLine
 {
@@ -52,6 +89,7 @@ sealed class Runner
     readonly Tools tools;
     readonly List<string> args;
     Process? process;
+    IntPtr job;
     string? error;
     bool cancelled;
 
@@ -102,6 +140,7 @@ sealed class Runner
             {
                 using var p = Process.Start(Info(tools, args))!;
                 process = p;
+                job = ProcessTree.Create(p);
                 p.ErrorDataReceived += (_, e) => { if (e.Data != null) Line?.Invoke(e.Data); };
                 p.BeginErrorReadLine();
                 try { p.PriorityClass = ProcessPriorityClass.BelowNormal; } catch (Exception) { }
@@ -111,6 +150,7 @@ sealed class Runner
                     Line?.Invoke(line);
                 }
                 p.WaitForExit();
+                ProcessTree.Release(job);
                 Finished?.Invoke(cancelled ? "cancelled" : p.ExitCode == 0 ? null : error ?? "The build tools stopped without saying why. See the details.");
             }
             catch (Exception e)
@@ -124,13 +164,7 @@ sealed class Runner
     {
         cancelled = true;
         // (the whole tree: python, then the compiler it started)
-        try
-        {
-            var id = process?.Id;
-            if (id != null)
-                Process.Start(new ProcessStartInfo("taskkill", $"/PID {id} /T /F") { CreateNoWindow = true, UseShellExecute = false })?.WaitForExit(5000);
-        }
-        catch (Exception) { }
+        ProcessTree.End(job);
         try { process?.Kill(); } catch (Exception) { }
     }
 
