@@ -59,11 +59,15 @@ The game does not come ready-made: it is built on your PC from your copy.
 
 **With Hookshot Builder, the easiest:**
 
-1. Download the HookshotBuilder zip from the Releases page, extract it, and run `HookshotBuilder.exe`. Keep the `tools`
-   folder beside it.
-2. Choose your game's `.nup`, or your `romfs` and `exefs` folders. The builder checks that it is the right version.
-3. Choose a language and a folder for the finished game, and start the build.
-4. When it finishes, open `hookshot.exe` in that folder.
+1. Install the [Microsoft .NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0), Python 3.12
+   from [python.org](https://www.python.org/downloads/windows/) and the `ucrt-x86_64` build of
+   [llvm-mingw](https://github.com/mstorsjo/llvm-mingw/releases). Add Python to `PATH` and set
+   `HOOKSHOT_MINGW` to the extracted llvm-mingw folder.
+2. Download the small HookshotBuilder package from the Releases page, extract it, and run `HookshotBuilder.exe`.
+   Keep the package's `tools` folder beside it. The builder package no longer includes Python or llvm-mingw.
+3. Choose your game's `.nup`, or your `romfs` and `exefs` folders. The builder checks that it is the right version.
+4. Choose a language and a folder for the finished game, and start the build.
+5. When it finishes, open `hookshot.exe` in that folder.
 
 **From the command line:**
 
@@ -161,8 +165,9 @@ What a new build keeps and what it replaces in the game folder:
 
 ### What you need
 
-- Nothing to install for the build itself: Hookshot Builder brings its own compiler ([llvm-mingw](https://github.com/mstorsjo/llvm-mingw),
-  as TotK Recomp does), Python and libraries. Visual Studio and the Windows SDK are no longer needed.
+- The HookshotBuilder download is a small launcher plus the Hookshot tools. Install Python and
+  [llvm-mingw](https://github.com/mstorsjo/llvm-mingw) separately; this avoids carrying a 300 MB compiler and Python
+  runtime in every builder download. Visual Studio and the Windows SDK are no longer needed.
 - 64-bit Windows 10 or 11.
 - A graphics card with Vulkan 1.3 and mesh shaders, with an up-to-date driver. Only NVIDIA has been tested.
 - 16 GB of RAM or more. A run uses about 10 GB.

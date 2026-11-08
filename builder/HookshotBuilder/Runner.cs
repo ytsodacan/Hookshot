@@ -6,22 +6,27 @@ namespace HookshotBuilder;
 /// Where nx2/make_game.py and its Python are: a "tools" folder beside the app when packaged, or the source tree it sits in.
 sealed record Tools(string Root, string Python)
 {
-    /// Which release these tools are (tools/version.txt, written when the release is packed); null from the source tree
+    /// Which release these tools are (tools/version.txt, written when the release is packed); null from the source tree.
     public string? Version => File.Exists(Path.Combine(Root, "version.txt")) ? File.ReadAllText(Path.Combine(Root, "version.txt")).Trim() : null;
 
     public static Tools? Find()
     {
         var at = AppContext.BaseDirectory;
-        var bundled = Path.Combine(at, "tools");
-        if (File.Exists(Path.Combine(bundled, "nx2", "make_game.py")))
-        {
-            var py = Path.Combine(bundled, "python", "python.exe");
-            return new Tools(bundled, File.Exists(py) ? py : "python");
-        }
+        var configured = Environment.GetEnvironmentVariable("HOOKSHOT_TOOLS");
+        var roots = new[] { configured, Path.Combine(at, "tools") }.Where(r => !string.IsNullOrWhiteSpace(r));
+        foreach (var root in roots)
+            if (File.Exists(Path.Combine(root!, "nx2", "make_game.py")))
+                return new Tools(root!, ChoosePython(root!));
         for (var d = new DirectoryInfo(at); d != null; d = d.Parent)
             if (File.Exists(Path.Combine(d.FullName, "nx2", "make_game.py")))
-                return new Tools(d.FullName, "python");
+                return new Tools(d.FullName, ChoosePython(d.FullName));
         return null;
+    }
+
+    static string ChoosePython(string root)
+    {
+        var bundled = Path.Combine(root, "python", "python.exe");
+        return File.Exists(bundled) ? bundled : "python";
     }
 }
 
@@ -125,7 +130,7 @@ sealed class Runner
             if (tools.Python == "python" && Directory.Exists(Path.Combine(tools.Root, "python")))
                 return (false, "The builder's own Python (tools/python/python.exe) is missing. Your antivirus probably removed it: restore it " +
                                "from quarantine, or unpack the zip again into a folder your antivirus allows, then try again.");
-            return (false, "Python was not found. Install Python 3 or use the full Hookshot Builder package.");
+            return (false, "Python was not found. Install Python 3 and add it to PATH, then try again.");
         }
     }
 }
