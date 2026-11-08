@@ -213,6 +213,12 @@ void hos_display_start(void) {
     }
     renderer_up = CreateEventA(NULL, TRUE, FALSE, NULL);
     __atomic_store_n(&start_asked, 1, __ATOMIC_RELEASE);
+    /*
+       The guest starts submitting during its initialization.  Wait here, before
+       guest code can hold one of its startup mutexes across QueueSubmitCommands,
+       so renderer preparation cannot block another guest thread behind it.
+    */
+    WaitForSingleObject(renderer_up, INFINITE);
 }
 
 /* the main thread's loop, until the process ends: the window once asked for, then its events */
