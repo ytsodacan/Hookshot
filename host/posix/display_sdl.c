@@ -70,7 +70,7 @@ static int load_sdl(void) {
     void *m = LoadLibraryA(path);
     if (!m) m = LoadLibraryA(
 #ifdef __APPLE__
-        "libSDL2-2.0.0.dylib"
+        "/opt/homebrew/lib/libSDL2-2.0.0.dylib"
 #else
         "SDL2.dll"
 #endif

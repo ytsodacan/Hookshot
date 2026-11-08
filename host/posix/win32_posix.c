@@ -904,6 +904,8 @@ HMODULE LoadLibraryA(LPCSTR name) {
     }
     HMODULE m = dlopen(path, RTLD_NOW | RTLD_LOCAL);
 #ifdef __APPLE__
+    if (!m && !strcasecmp(base, "libvulkan.dylib"))
+        m = dlopen("/opt/homebrew/lib/libvulkan.dylib", RTLD_NOW | RTLD_LOCAL);
     if (!m && !strcasecmp(base, "libvulkan.dylib")) m = dlopen("libMoltenVK.dylib", RTLD_NOW | RTLD_LOCAL);
 #endif
     if (!m) last_error = ERROR_FILE_NOT_FOUND;
