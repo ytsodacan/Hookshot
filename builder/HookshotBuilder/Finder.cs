@@ -37,7 +37,7 @@ static class Finder
             try
             {
                 dirs.AddRange(Directory.EnumerateDirectories(dir)
-                    .Where(s => !Path.GetFileName(s).StartsWith('.') && !Path.GetFileName(s).StartsWith('$')
+                    .Where(s => !Path.GetFileName(s).StartsWith(".") && !Path.GetFileName(s).StartsWith("$")
                                 && !string.Equals(Path.GetFileName(s), "Windows", StringComparison.OrdinalIgnoreCase)
                                 && !Path.GetFileName(s).StartsWith("Program", StringComparison.OrdinalIgnoreCase))
                     .Take(200));

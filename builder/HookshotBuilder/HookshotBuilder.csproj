@@ -2,7 +2,8 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>12.0</LangVersion>
     <UseWPF>true</UseWPF>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -11,18 +12,26 @@
     <Version>0.1.0</Version>
     <Product>Hookshot Builder</Product>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <PlatformTarget>x64</PlatformTarget>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <ApplicationIcon Condition="Exists('..\..\work\hookshot.ico')">..\..\work\hookshot.ico</ApplicationIcon>
   </PropertyGroup>
 
-  <!-- Needs nothing installed: dotnet publish -c Release. A folder (the app and .NET's own signed files), not one compressed exe:
-       antivirus programs took the self-extracting single file for a trojan and removed it -->
+  <!-- .NET Framework 4.8 is part of Windows 10 (1903 and later) and Windows 11: the app is the exe and nothing else, with no .NET
+       runtime to download or install (a self-contained .NET 8 build was ~70 MB; the setup's "dotnet" part is now empty and skipped). -->
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
-    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-    <SelfContained>true</SelfContained>
-    <PublishSingleFile>false</PublishSingleFile>
     <DebugType>none</DebugType>
+    <Optimize>true</Optimize>
   </PropertyGroup>
+
+  <!-- all part of the .NET Framework itself: no extra files beside the exe -->
+  <ItemGroup>
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.IO.Compression.FileSystem" />
+    <Reference Include="System.Web.Extensions" />
+    <Reference Include="System.Windows.Forms" />
+  </ItemGroup>
 
   <!-- Inter (SIL Open Font License, Fonts/Inter-LICENSE.txt) and the hookshot, inside the app -->
   <ItemGroup>

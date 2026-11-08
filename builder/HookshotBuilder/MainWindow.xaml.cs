@@ -260,7 +260,7 @@ public partial class MainWindow : Window
             FillDumps();
             var r = await Runner.Check(tools, new[] { "--check", "--nup", d.Path });
             checks[d.Path] = r;
-            if (!r.Ok && r.Text.Contains("antivirus", StringComparison.OrdinalIgnoreCase))
+            if (!r.Ok && r.Text.ContainsIgnoreCase("antivirus"))
             {
                 checking = false;
                 ShowProblem(r.Text, tools: true);
@@ -366,8 +366,8 @@ public partial class MainWindow : Window
 
     static string? PickFolder(string title)
     {
-        var d = new OpenFolderDialog { Title = title };
-        return d.ShowDialog() == true ? d.FolderName : null;
+        using var d = new System.Windows.Forms.FolderBrowserDialog { Description = title, ShowNewFolderButton = true };
+        return d.ShowDialog() == System.Windows.Forms.DialogResult.OK ? d.SelectedPath : null;
     }
 
     void BrowseOut(object sender, RoutedEventArgs e) => OutPath.Text = PickFolder("Choose where the game goes") ?? OutPath.Text;
@@ -473,15 +473,15 @@ public partial class MainWindow : Window
         }
         else if (line.StartsWith("@@progress "))
         {
-            if (double.TryParse(line[11..], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var f) && current != null
+            if (double.TryParse(line.Substring(11), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var f) && current != null
                 && Weight.TryGetValue(current, out var w))
             {
                 if (current == "compile") compiled = f;
-                SetProgress(w.From + w.Size * Math.Clamp(f, 0, 1));
+                SetProgress(w.From + w.Size * Compat.Clamp(f, 0, 1));
             }
             return;
         }
-        else if (line.StartsWith("@@done ")) finished = line[7..];
+        else if (line.StartsWith("@@done ")) finished = line.Substring(7);
         else if (FilesLine.Match(line) is { Success: true } m) filesOf = int.Parse(m.Groups[1].Value);
         else if (FileLine.IsMatch(line)) filesDone++;
         if (current == "compile" && filesOf > 0 && rows.TryGetValue("compile", out var c)) c.Small($"{filesDone} of {filesOf} files");
@@ -501,7 +501,7 @@ public partial class MainWindow : Window
 
     void SetProgress(double f)
     {
-        f = Math.Clamp(f, 0, 1);
+        f = Compat.Clamp(f, 0, 1);
         RingText.Text = $"{(int)(f * 100)}%";
         UpdateBar.Value = f;
         const double r = 55, c = 60;
@@ -547,7 +547,7 @@ public partial class MainWindow : Window
             return;
         }
         if (current != null && rows.TryGetValue(current, out var row)) row.Stopped();
-        ShowProblem(failure ?? "The build tools stopped without saying why.", tools: failure?.Contains("antivirus", StringComparison.OrdinalIgnoreCase) == true);
+        ShowProblem(failure ?? "The build tools stopped without saying why.", tools: failure?.ContainsIgnoreCase("antivirus") == true);
     }
 
     void LogToggled(object sender, RoutedEventArgs e)

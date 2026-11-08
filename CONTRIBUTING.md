@@ -90,7 +90,8 @@ compile at once. The README's [Linux section](readme.md#on-linux) has the detail
 
 ### Hookshot Builder
 
-The builder is a .NET 8 WPF app. Open `builder/HookshotBuilder.sln` in Visual Studio 2022 with the .NET desktop
+The builder is a .NET Framework 4.8 WPF app (4.8 is part of Windows 10 1903+ and Windows 11, so the exe is small and the
+setup has no .NET runtime to download). Open `builder/HookshotBuilder.sln` in Visual Studio 2022 with the .NET desktop
 workload, or build it from a developer prompt:
 
 ```powershell

@@ -136,7 +136,7 @@ patch. The project does not keep maintenance branches for older minor versions: 
 | `hookshot_log.txt` and the Insert menu | `nx2/version.py`: `HOOKSHOT_VERSION`, then `VERSION`/`version.txt`, then `git describe --tags --match "v[0-9]*"` |
 | `hookshot_version.txt` in a build | the `VERSION` file written when the tools are packaged (`nx2/make_game.py`) |
 | AppImage file name | `git describe --tags --match "v[0-9]*"` (`scripts/linux/appimage.sh`) |
-| `HookshotBuilder.exe` | the MSBuild `Version` passed at publish time (`dotnet publish -p:Version=<version>`); the `csproj`'s `0.1.0` is only the default for a local build |
+| `HookshotBuilder.exe` | the MSBuild `Version` passed at publish time (`dotnet build -c Release -p:Version=<version>`); the `csproj`'s `0.1.0` is only the default for a local build |
 
 `nx2/version.py` also appends a fingerprint of the source files, `(source 1a2b3c4d)`. It is not a version: it tells
 two builds of the same release apart, and it is the only identifier a build from a modified checkout has.

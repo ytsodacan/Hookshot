@@ -2,7 +2,7 @@ using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Net.Http;
-using System.Text.Json;
+using System.Web.Script.Serialization;
 using System.Windows;
 
 namespace HookshotBuilder;
@@ -46,6 +46,7 @@ static class Updater
         try
         {
             var token = w.DownloadToken;
+            System.Net.ServicePointManager.SecurityProtocol |= System.Net.SecurityProtocolType.Tls12;
             using var http = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
             http.DefaultRequestHeaders.UserAgent.ParseAdd("HookshotBuilder");
             w.Note("Asking GitHub for the latest release");
@@ -54,20 +55,25 @@ static class Updater
             var hasList = false;
             using (var ask = new CancellationTokenSource(TimeSpan.FromSeconds(30)))
             using (var both = CancellationTokenSource.CreateLinkedTokenSource(token, ask.Token))
-            using (var doc = JsonDocument.Parse(await http.GetStringAsync(Latest, both.Token)))
             {
-                newTag = doc.RootElement.GetProperty("tag_name").GetString();
-                foreach (var asset in doc.RootElement.GetProperty("assets").EnumerateArray())
-                {
-                    var assetName = asset.GetProperty("name").GetString();
-                    if (assetName == Asset)
+                using var reply = await http.GetAsync(Latest, both.Token);
+                reply.EnsureSuccessStatusCode();
+                var json = new JavaScriptSerializer { MaxJsonLength = int.MaxValue }
+                    .Deserialize<Dictionary<string, object>>(await reply.Content.ReadAsStringAsync());
+                newTag = json["tag_name"] as string;
+                if (json["assets"] is System.Collections.IEnumerable assets)
+                    foreach (var item in assets)
                     {
-                        url = asset.GetProperty("browser_download_url").GetString();
-                        size = asset.GetProperty("size").GetInt64();
+                        if (item is not Dictionary<string, object> asset) continue;
+                        var assetName = asset["name"] as string;
+                        if (assetName == Asset)
+                        {
+                            url = asset["browser_download_url"] as string;
+                            size = Convert.ToInt64(asset["size"]);
+                        }
+                        else if (assetName == SetupAsset) setupUrl = asset["browser_download_url"] as string;
+                        else if (assetName == SetupList) hasList = true;
                     }
-                    else if (assetName == SetupAsset) setupUrl = asset.GetProperty("browser_download_url").GetString();
-                    else if (assetName == SetupList) hasList = true;
-                }
             }
             if (newTag == null || (url == null && setupUrl == null)) throw new InvalidOperationException("The latest release has no " + Asset + ".");
             if (newTag == tools.Version)
@@ -84,10 +90,14 @@ static class Updater
             {
                 w.Note($"Downloading the update for {newTag}");
                 var setup = Path.Combine(cache, SetupAsset);
-                var bytes = await http.GetByteArrayAsync(setupUrl, token);
-                await File.WriteAllBytesAsync(setup, bytes, token);
+                using (var got = await http.GetAsync(setupUrl, token))
+                {
+                    got.EnsureSuccessStatusCode();
+                    var bytes = await got.Content.ReadAsByteArrayAsync();
+                    await Task.Run(() => File.WriteAllBytes(setup, bytes), token);
+                }
                 var ssi = new ProcessStartInfo(setup) { UseShellExecute = false, WorkingDirectory = cache };
-                foreach (var arg in new[] { "--update", folder, "--tag", newTag, "--fetched" }) ssi.ArgumentList.Add(arg);
+                ssi.Arguments = CommandLine.Join(new[] { "--update", folder, "--tag", newTag, "--fetched" });
                 Process.Start(ssi);
                 Application.Current.Shutdown();
                 return;
@@ -99,14 +109,14 @@ static class Updater
             {
                 response.EnsureSuccessStatusCode();
                 var total = response.Content.Headers.ContentLength ?? size;
-                await using var from = await response.Content.ReadAsStreamAsync(token);
-                await using var to = File.Create(zip);
+                using var from = await response.Content.ReadAsStreamAsync();
+                using var to = File.Create(zip);
                 var buffer = new byte[1 << 20];
                 long have = 0;
                 var shown = DateTime.MinValue;
-                for (int n; (n = await from.ReadAsync(buffer, token)) > 0;)
+                for (int n; (n = await from.ReadAsync(buffer, 0, buffer.Length, token)) > 0;)
                 {
-                    await to.WriteAsync(buffer.AsMemory(0, n), token);
+                    await to.WriteAsync(buffer, 0, n, token);
                     have += n;
                     if (total > 0 && DateTime.UtcNow - shown > TimeSpan.FromMilliseconds(200))
                     {
@@ -132,7 +142,7 @@ static class Updater
             var exe = Path.Combine(target, "HookshotBuilder.exe");
             if (!File.Exists(exe)) throw new FileNotFoundException("The download has no HookshotBuilder.exe (your antivirus may have removed it).");
             var si = new ProcessStartInfo(exe) { UseShellExecute = false, WorkingDirectory = target };
-            foreach (var arg in new[] { "--update", folder, "--tag", newTag, "--fetched" }) si.ArgumentList.Add(arg);
+            si.Arguments = CommandLine.Join(new[] { "--update", folder, "--tag", newTag, "--fetched" });
             Process.Start(si);
             Application.Current.Shutdown();
         }
