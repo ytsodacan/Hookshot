@@ -60,11 +60,23 @@ static int load_sdl(void) {
     char path[PATH_MAX];
     DWORD n = GetModuleFileNameA(NULL, path, sizeof path);
     while (n && path[n - 1] != '/') n--;
-    snprintf(path + n, sizeof path - n, "SDL2.dll");   /* (beside the executable first: LoadLibraryA makes it libSDL2-2.0.so.0) */
+    snprintf(path + n, sizeof path - n,
+#ifdef __APPLE__
+             "libSDL2-2.0.0.dylib"
+#else
+             "SDL2.dll"
+#endif
+    );
     void *m = LoadLibraryA(path);
-    if (!m) m = LoadLibraryA("SDL2.dll");
+    if (!m) m = LoadLibraryA(
+#ifdef __APPLE__
+        "libSDL2-2.0.0.dylib"
+#else
+        "SDL2.dll"
+#endif
+    );
     if (!m) {
-        hos_log("display: libSDL2-2.0.so.0 not found: no window");
+        hos_log("display: SDL2 runtime not found: no window");
         return 0;
     }
 #define GET(field, name) if (!(*(void **)&sdl.field = dlsym(m, name))) { hos_log("display: SDL2 has no %s", name); return 0; }

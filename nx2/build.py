@@ -570,9 +570,15 @@ def main():
             dll, dst = os.path.join(WGPU, "lib", "wgpu_native.dll"), os.path.join(out, "wgpu_native.dll")
             if not os.path.exists(dst) or os.path.getsize(dst) != os.path.getsize(dll):
                 shutil.copyfile(dll, dst)
-        # (hookshot) SDL2.dll beside it: host/pad_sdl.c's controllers (DualSense, DualShock 4, Switch Pro ...)
-        sdl = os.path.join(kit.HERE, "..", "third_party", "sdl2", "SDL2.dll")
-        sdl_dst = os.path.join(out, "SDL2.dll")
+        # (hookshot) SDL2 beside the executable: host/pad_sdl.c's controllers and the display.
+        if MACOS:
+            sdl = os.environ.get("HOOKSHOT_SDL2", "libSDL2-2.0.0.dylib")
+            if not os.path.isabs(sdl):
+                sdl = os.path.join("/opt/homebrew/lib", sdl)
+            sdl_dst = os.path.join(out, "libSDL2-2.0.0.dylib")
+        else:
+            sdl = os.path.join(kit.HERE, "..", "third_party", "sdl2", "SDL2.dll")
+            sdl_dst = os.path.join(out, "SDL2.dll")
         if os.path.exists(sdl) and (not os.path.exists(sdl_dst) or os.path.getsize(sdl_dst) != os.path.getsize(sdl)):
             import shutil
             shutil.copyfile(sdl, sdl_dst)

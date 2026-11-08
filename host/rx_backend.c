@@ -214,7 +214,12 @@ int rx_start(void *hwnd) {
     const char *b = getenv("RX_BACKEND");
     const int eden = b && !_stricmp(b, "eden");
     if (!b || !_stricmp(b, "vulkan") || eden) {   /* (hookshot: Vulkan unless told otherwise; a started game has no RX_BACKEND) */
-        const char *dll = eden ? "mkw_eden.dll" : "hookshot_vk.dll";
+        const char *dll = eden ? "mkw_eden.dll" :
+#ifdef __APPLE__
+            "hookshot_vk.dylib";
+#else
+            "hookshot_vk.dll";
+#endif
         const MkwVkRenderer *r = load_vulkan(dll);
         if (r && r->start(hwnd)) {
             vk = r;
@@ -231,7 +236,13 @@ int rx_start(void *hwnd) {
 /* (hookshot) hookshot --prepare-shaders: the Vulkan back end started with no window and no game, which prepares
    every shader in its start (gpu/vk/vk_main.cpp started_up) and is then let go. 0 when there is no usable Vulkan */
 int rx_prepare_shaders(void) {
-    const MkwVkRenderer *r = load_vulkan("hookshot_vk.dll");
+    const MkwVkRenderer *r = load_vulkan(
+#ifdef __APPLE__
+        "hookshot_vk.dylib"
+#else
+        "hookshot_vk.dll"
+#endif
+    );
     return r && r->start(NULL);
 }
 void rx_resize(int width, int height) { vk ? vk->resize(width, height) : wgr_resize(width, height); }
