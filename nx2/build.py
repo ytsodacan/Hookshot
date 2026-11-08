@@ -572,9 +572,13 @@ def main():
                 shutil.copyfile(dll, dst)
         # (hookshot) SDL2 beside the executable: host/pad_sdl.c's controllers and the display.
         if MACOS:
-            sdl = os.environ.get("HOOKSHOT_SDL2", "libSDL2-2.0.0.dylib")
-            if not os.path.isabs(sdl):
-                sdl = os.path.join("/opt/homebrew/lib", sdl)
+            sdl = os.environ.get("HOOKSHOT_SDL2", "")
+            if not sdl:
+                try:
+                    sdl = subprocess.check_output(["brew", "--prefix", "sdl2"], text=True).strip()
+                    sdl = os.path.join(sdl, "lib", "libSDL2-2.0.0.dylib")
+                except (OSError, subprocess.CalledProcessError):
+                    sdl = "/opt/homebrew/opt/sdl2/lib/libSDL2-2.0.0.dylib"
             sdl_dst = os.path.join(out, "libSDL2-2.0.0.dylib")
         else:
             sdl = os.path.join(kit.HERE, "..", "third_party", "sdl2", "SDL2.dll")
