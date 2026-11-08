@@ -69,6 +69,12 @@ cp "$VK" "$L/hookshot_vk.so"
 cp "$DEPS/sdl2/libSDL2-2.0.so.0" "$L/libSDL2-2.0.so.0"
 cp -a "$DEPS/licenses" "$T/licenses"   # (LLVM, FFmpeg, dav1d, SDL2: what this AppImage carries besides Hookshot)
 
+# The downloaded Python build is stripped, but its extension wheels and the native libraries built above may still
+# contain symbols and debug sections. They are loaded at runtime only; removing those sections keeps the builder image
+# smaller without changing its ABI.
+find "$APPDIR/usr/python" -type f -name '*.so' -exec strip --strip-unneeded {} + 2>/dev/null || true
+strip --strip-unneeded "$L/hookshot_vk.so" "$L/libSDL2-2.0.so.0" 2>/dev/null || true
+
 # the sysroot: this system's C library (headers, start files, the libraries to link against) and GCC's runtime pieces
 S=$L/sysroot
 mkdir -p "$S/usr/lib/x86_64-linux-gnu" "$S/usr/lib/gcc/x86_64-linux-gnu" "$S/lib64"
@@ -87,6 +93,10 @@ mkdir -p "$G"
 for f in crtbegin.o crtbeginS.o crtbeginT.o crtend.o crtendS.o libgcc.a libgcc_eh.a libgcc_s.so; do
     [ -e "$GCC/$f" ] && cp -aL "$GCC/$f" "$G/" || true
 done
+
+# The extracted LLVM payload contains only the compiler drivers and linker/profile tool used by nx2. Strip their
+# remaining symbols as well; the tools do not need debug information to compile a player's game.
+find "$L/emsdk/upstream/bin" -type f -perm -111 -exec strip --strip-unneeded {} + 2>/dev/null || true
 # (libgcc_s.so is a linker script naming /lib/x86_64-linux-gnu/libgcc_s.so.1: found in the sysroot through lib -> usr/lib)
 
 # ---- check: the bundled compiler builds and links a program against the sysroot, and it runs ----
