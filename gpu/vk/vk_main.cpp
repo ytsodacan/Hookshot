@@ -87,6 +87,13 @@ bool create_instance() {
 #ifdef _WIN32
     const char* exts[] = {VK_KHR_SURFACE_EXTENSION_NAME, VK_KHR_WIN32_SURFACE_EXTENSION_NAME};
     const uint32_t n_exts = 2;
+#elif defined(__APPLE__)
+    const char* exts[] = {
+        VK_KHR_SURFACE_EXTENSION_NAME,
+        VK_EXT_METAL_SURFACE_EXTENSION_NAME,
+        VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME
+    };
+    const uint32_t n_exts = 3;
 #else
     // (linux: every window system's surface the loader has, for whichever one SDL's window is on: X11 or Wayland)
     const char* exts[4] = {VK_KHR_SURFACE_EXTENSION_NAME};
@@ -107,6 +114,9 @@ bool create_instance() {
     ci.pApplicationInfo = &app;
     ci.enabledExtensionCount = n_exts;
     ci.ppEnabledExtensionNames = exts;
+#ifdef __APPLE__
+    ci.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+#endif
     // RX_VK_VALIDATION=1: the Khronos validation layer (when installed)
     const char* layer = "VK_LAYER_KHRONOS_validation";
     if (getenv("RX_VK_VALIDATION")) ci.enabledLayerCount = 1, ci.ppEnabledLayerNames = &layer;
