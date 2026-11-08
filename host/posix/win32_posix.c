@@ -103,18 +103,42 @@ static struct timespec rel_ms(DWORD ms) {
     return ts;
 }
 #ifndef __linux__
-static pthread_mutex_t posix_mu = PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t posix_cv = PTHREAD_COND_INITIALIZER;
+/* No futex here, so the waits of every condition variable and every WaitOnAddress go through pthread conditions. They used to share
+   ONE: a wake-one (pthread_cond_signal) then woke whichever waiter was first in line, usually one of the game's 30-odd idle
+   workers waiting on something else, which looked at its own word, found it unchanged and went back to sleep, and the thread the
+   wake was for never woke (the game's main thread, blocked for good on an event that had already come). WaitOnAddress's waker did
+   not even take the lock, so its broadcast could fall between a waiter's check and its sleep. Now: a pthread mutex and condition per
+   bucket of keys (the variable's or the address's); a waiter and its waker always meet in the same bucket, the waker takes that
+   bucket's lock, and wakes broadcast (a bucket shared by two keys only costs a spurious wake-up, which every caller loops on). */
+#define POSIX_BUCKETS 64
+static pthread_mutex_t posix_mu[POSIX_BUCKETS];
+static pthread_cond_t posix_cv[POSIX_BUCKETS];
+static pthread_once_t posix_once = PTHREAD_ONCE_INIT;
+static void posix_init(void) {
+    for (int i = 0; i < POSIX_BUCKETS; i++) {
+        pthread_mutex_init(&posix_mu[i], NULL);
+        pthread_cond_init(&posix_cv[i], NULL);
+    }
+}
+static unsigned posix_bucket(const void *key) {
+    pthread_once(&posix_once, posix_init);
+    uintptr_t k = (uintptr_t)key >> 2;
+    k ^= k >> 7;
+    return (unsigned)(k % POSIX_BUCKETS);
+}
+static void posix_wake(const void *key) {
+    const unsigned b = posix_bucket(key);
+    pthread_mutex_lock(&posix_mu[b]);
+    pthread_cond_broadcast(&posix_cv[b]);
+    pthread_mutex_unlock(&posix_mu[b]);
+}
 #endif
 void WakeConditionVariable(CONDITION_VARIABLE *cv) {
     __atomic_add_fetch(&cv->seq, 1, __ATOMIC_SEQ_CST);
 #ifdef __linux__
     futex(&cv->seq, FUTEX_WAKE_PRIVATE, 1, NULL);
 #else
-    (void)cv;
-    pthread_mutex_lock(&posix_mu);
-    pthread_cond_signal(&posix_cv);
-    pthread_mutex_unlock(&posix_mu);
+    posix_wake(cv);
 #endif
 }
 void WakeAllConditionVariable(CONDITION_VARIABLE *cv) {
@@ -122,10 +146,7 @@ void WakeAllConditionVariable(CONDITION_VARIABLE *cv) {
 #ifdef __linux__
     futex(&cv->seq, FUTEX_WAKE_PRIVATE, INT_MAX, NULL);
 #else
-    (void)cv;
-    pthread_mutex_lock(&posix_mu);
-    pthread_cond_broadcast(&posix_cv);
-    pthread_mutex_unlock(&posix_mu);
+    posix_wake(cv);
 #endif
 }
 static BOOL cv_wait(CONDITION_VARIABLE *cv, DWORD ms, void (*unlock)(void *), void (*relock)(void *, ULONG), void *l, ULONG flags) {
@@ -136,10 +157,11 @@ static BOOL cv_wait(CONDITION_VARIABLE *cv, DWORD ms, void (*unlock)(void *), vo
     const long r = futex(&cv->seq, FUTEX_WAIT_PRIVATE, seq, ms == INFINITE ? NULL : &ts);
     const int timed_out = r == -1 && errno == ETIMEDOUT;
 #else
-    pthread_mutex_lock(&posix_mu);
+    const unsigned b = posix_bucket(cv);
+    pthread_mutex_lock(&posix_mu[b]);
     int timed_out = 0;
     if (ms == INFINITE) {
-        while (__atomic_load_n(&cv->seq, __ATOMIC_SEQ_CST) == seq) pthread_cond_wait(&posix_cv, &posix_mu);
+        while (__atomic_load_n(&cv->seq, __ATOMIC_SEQ_CST) == seq) pthread_cond_wait(&posix_cv[b], &posix_mu[b]);
     } else {
         struct timespec ts;
         clock_gettime(CLOCK_REALTIME, &ts);
@@ -147,9 +169,9 @@ static BOOL cv_wait(CONDITION_VARIABLE *cv, DWORD ms, void (*unlock)(void *), vo
         ts.tv_nsec += (long)(ms % 1000) * 1000000L;
         if (ts.tv_nsec >= 1000000000L) ts.tv_sec++, ts.tv_nsec -= 1000000000L;
         while (__atomic_load_n(&cv->seq, __ATOMIC_SEQ_CST) == seq &&
-               pthread_cond_timedwait(&posix_cv, &posix_mu, &ts) != 0) timed_out = 1;
+               pthread_cond_timedwait(&posix_cv[b], &posix_mu[b], &ts) != 0) timed_out = 1;
     }
-    pthread_mutex_unlock(&posix_mu);
+    pthread_mutex_unlock(&posix_mu[b]);
 #endif
     relock(l, flags);
     if (timed_out) { last_error = ERROR_TIMEOUT; return FALSE; }
@@ -186,21 +208,22 @@ BOOL WaitOnAddress(volatile void *addr, void *compare, SIZE_T size, DWORD ms) {
     if (r == -1 && errno == ETIMEDOUT) { last_error = ERROR_TIMEOUT; return FALSE; }
     return TRUE;
 #else
-    pthread_mutex_lock(&posix_mu);
+    const unsigned b = posix_bucket((const void *)((uintptr_t)addr & ~(uintptr_t)3));
+    pthread_mutex_lock(&posix_mu[b]);
     struct timespec now;
     clock_gettime(CLOCK_REALTIME, &now);
     const int64_t until = ms == INFINITE ? INT64_MAX :
         (int64_t)now.tv_sec * 1000000000LL + now.tv_nsec + (int64_t)ms * 1000000;
     while (!memcmp((const void *)addr, compare, size)) {
         if (ms == 0 || now_ns() >= until) {
-            pthread_mutex_unlock(&posix_mu);
+            pthread_mutex_unlock(&posix_mu[b]);
             last_error = ERROR_TIMEOUT;
             return FALSE;
         }
         struct timespec ts = {(time_t)(until / 1000000000), (long)(until % 1000000000)};
-        if (pthread_cond_timedwait(&posix_cv, &posix_mu, &ts) == ETIMEDOUT) break;
+        if (pthread_cond_timedwait(&posix_cv[b], &posix_mu[b], &ts) == ETIMEDOUT) break;
     }
-    pthread_mutex_unlock(&posix_mu);
+    pthread_mutex_unlock(&posix_mu[b]);
     return TRUE;
 #endif
 }
@@ -208,16 +231,14 @@ void WakeByAddressSingle(void *addr) {
 #ifdef __linux__
     futex((volatile uint32_t *)((uintptr_t)addr & ~(uintptr_t)3), FUTEX_WAKE_PRIVATE, INT_MAX, NULL);
 #else
-    (void)addr;
-    pthread_cond_signal(&posix_cv);
+    posix_wake((const void *)((uintptr_t)addr & ~(uintptr_t)3));   /* (all, as the Linux futex above: any waiter may be the one) */
 #endif
 }
 void WakeByAddressAll(void *addr) {
 #ifdef __linux__
     futex((volatile uint32_t *)((uintptr_t)addr & ~(uintptr_t)3), FUTEX_WAKE_PRIVATE, INT_MAX, NULL);
 #else
-    (void)addr;
-    pthread_cond_broadcast(&posix_cv);
+    posix_wake((const void *)((uintptr_t)addr & ~(uintptr_t)3));
 #endif
 }
 
