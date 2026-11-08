@@ -59,10 +59,10 @@ The game does not come ready-made: it is built on your PC from your copy.
 
 **With Hookshot Builder, the easiest:**
 
-1. Install the [Microsoft .NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0), Python 3.12
-   from [python.org](https://www.python.org/downloads/windows/) and the `ucrt-x86_64` build of
+1. Install Python 3.12 from [python.org](https://www.python.org/downloads/windows/) and the `ucrt-x86_64` build of
    [llvm-mingw](https://github.com/mstorsjo/llvm-mingw/releases). Add Python to `PATH` and set
-   `HOOKSHOT_MINGW` to the extracted llvm-mingw folder.
+   `HOOKSHOT_MINGW` to the extracted llvm-mingw folder. Nothing else: the builder itself uses the .NET Framework 4.8 that
+   comes with Windows 10 (1903 and later) and Windows 11.
 2. Download the small HookshotBuilder package from the Releases page, extract it, and run `HookshotBuilder.exe`.
    Keep the package's `tools` folder beside it. The builder package no longer includes Python or llvm-mingw.
 3. Choose your game's `.nup`, or your `romfs` and `exefs` folders. The builder checks that it is the right version.
@@ -183,7 +183,7 @@ To build from the command line you also need:
 - [llvm-mingw](https://github.com/mstorsjo/llvm-mingw) (the `ucrt-x86_64` build), with `HOOKSHOT_MINGW` set to its folder. Without
   it the build uses the clang from [emsdk](https://github.com/emscripten-core/emsdk) at `C:\emsdk` with Visual Studio's C++ tools
   and the Windows SDK (`HOOKSHOT_MSVC=1` forces that route).
-- Visual Studio 2022 with .NET 8, only if you want to change the builder itself.
+- Visual Studio 2022 with the .NET desktop workload (.NET Framework 4.8 targeting pack), only if you want to change the builder itself.
 - The prebuilt tools that go in `third_party/`: `a64emit`, `lld-link`, `zbic` and SDL2.
 - What the HookshotBuilder zip carries in its `tools` folder and a clone does not. The builder sets the variables
   below itself; from the command line, set them before you run `make_game.py`:

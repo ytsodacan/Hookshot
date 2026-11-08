@@ -169,8 +169,8 @@ public partial class MainWindow : Window
 
     static string? PickFolder(string title)
     {
-        var d = new OpenFolderDialog { Title = title };
-        return d.ShowDialog() == true ? d.FolderName : null;
+        using var d = new System.Windows.Forms.FolderBrowserDialog { Description = title, ShowNewFolderButton = true };
+        return d.ShowDialog() == System.Windows.Forms.DialogResult.OK ? d.SelectedPath : null;
     }
 
     void BrowseRomfs(object sender, RoutedEventArgs e) => RomfsPath.Text = PickFolder("Choose the romfs folder") ?? RomfsPath.Text;
@@ -271,17 +271,17 @@ public partial class MainWindow : Window
         else if (line.StartsWith("@@progress "))
         {
             if (current != null && rows.TryGetValue(current, out var row) &&
-                double.TryParse(line[11..], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var f))
+                double.TryParse(line.Substring(11), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var f))
                 row.Progress(f);
         }
         else if (line.StartsWith("@@done "))
         {
-            finished = line[7..];
+            finished = line.Substring(7);
         }
         if (!line.StartsWith("@@progress"))
         {
             Log.AppendText(line + "\n");
-            if (Log.LineCount > 4000) Log.Text = Log.Text[(Log.Text.Length / 2)..];
+            if (Log.LineCount > 4000) Log.Text = Log.Text.Substring(Log.Text.Length / 2);
             if (ShowLog.IsChecked == true) Log.ScrollToEnd();
         }
     }

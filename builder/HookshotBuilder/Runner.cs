@@ -30,6 +30,27 @@ sealed record Tools(string Root, string Python)
     }
 }
 
+/// A command line for a child process: each argument quoted the way Windows programs (and Python) read them back
+static class CommandLine
+{
+    public static string Join(IEnumerable<string> args) => string.Join(" ", args.Select(Quote));
+
+    static string Quote(string a)
+    {
+        if (a.Length > 0 && a.IndexOfAny(new[] { ' ', '\t', '\n', '\v', '"' }) < 0) return a;
+        var sb = new System.Text.StringBuilder("\"");
+        for (var i = 0; i < a.Length; i++)
+        {
+            var slashes = 0;
+            while (i < a.Length && a[i] == '\\') { slashes++; i++; }
+            if (i == a.Length) sb.Append('\\', slashes * 2);
+            else if (a[i] == '"') sb.Append('\\', slashes * 2 + 1).Append('"');
+            else sb.Append('\\', slashes).Append(a[i]);
+        }
+        return sb.Append('"').ToString();
+    }
+}
+
 /// nx2/make_game.py as a child process: its lines as they come, and how it ended.
 sealed class Runner
 {
@@ -50,27 +71,31 @@ sealed class Runner
 
     static ProcessStartInfo Info(Tools tools, IEnumerable<string> args)
     {
+        var utf8 = new System.Text.UTF8Encoding(false);
+        var all = new List<string> { "-I", Path.Combine(tools.Root, "nx2", "make_game.py") };
+        all.AddRange(args);
         var si = new ProcessStartInfo(tools.Python)
         {
+            Arguments = CommandLine.Join(all),
+            StandardOutputEncoding = utf8,
+            StandardErrorEncoding = utf8,
             WorkingDirectory = tools.Root,
             UseShellExecute = false,
             CreateNoWindow = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
         };
-        si.Environment["PYTHONIOENCODING"] = "utf-8";
+        si.EnvironmentVariables["PYTHONIOENCODING"] = "utf-8";
         // (written into the game folder's hookshot_version.txt: the game starts this app again to update, host/hos_update.c)
-        if (Environment.ProcessPath != null) si.Environment["HOOKSHOT_BUILDER_EXE"] = Environment.ProcessPath;
+        var self = Process.GetCurrentProcess().MainModule?.FileName;
+        if (self != null) si.EnvironmentVariables["HOOKSHOT_BUILDER_EXE"] = self;
         // (the folder's own compiler, headers and libraries, when it has them: nothing of the PC's but Windows' own)
         var sets = new[] { ("EMSDK", "emsdk"), ("RX_CPM", "cpm"), ("WGPU_NATIVE", "wgpu-native") };
         foreach (var (name, folder) in sets)
         {
             var path = Path.Combine(tools.Root, folder);
-            if (Directory.Exists(path)) si.Environment[name] = path;
+            if (Directory.Exists(path)) si.EnvironmentVariables[name] = path;
         }
-        si.ArgumentList.Add("-I");
-        si.ArgumentList.Add(Path.Combine(tools.Root, "nx2", "make_game.py"));
-        foreach (var a in args) si.ArgumentList.Add(a);
         return si;
     }
 
@@ -87,7 +112,7 @@ sealed class Runner
                 try { p.PriorityClass = ProcessPriorityClass.BelowNormal; } catch (Exception) { }
                 while (p.StandardOutput.ReadLine() is { } line)
                 {
-                    if (line.StartsWith("@@error ")) error = line[8..];
+                    if (line.StartsWith("@@error ")) error = line.Substring(8);
                     Line?.Invoke(line);
                 }
                 p.WaitForExit();
@@ -103,7 +128,15 @@ sealed class Runner
     public void Cancel()
     {
         cancelled = true;
-        try { process?.Kill(entireProcessTree: true); } catch (Exception) { }
+        // (the whole tree: python, then the compiler it started)
+        try
+        {
+            var id = process?.Id;
+            if (id != null)
+                Process.Start(new ProcessStartInfo("taskkill", $"/PID {id} /T /F") { CreateNoWindow = true, UseShellExecute = false })?.WaitForExit(5000);
+        }
+        catch (Exception) { }
+        try { process?.Kill(); } catch (Exception) { }
     }
 
     /// Is this the supported game and version? The answer in plain words.
@@ -117,11 +150,11 @@ sealed class Runner
             var result = (false, "The game files could not be read.");
             while (await p.StandardOutput.ReadLineAsync() is { } line)
             {
-                if (line.StartsWith("@@check ok ")) result = (true, line[11..]);
-                else if (line.StartsWith("@@check bad ")) result = (false, line[12..]);
-                else if (line.StartsWith("@@error ")) result = (false, line[8..]);
+                if (line.StartsWith("@@check ok ")) result = (true, line.Substring(11));
+                else if (line.StartsWith("@@check bad ")) result = (false, line.Substring(12));
+                else if (line.StartsWith("@@error ")) result = (false, line.Substring(8));
             }
-            await p.WaitForExitAsync();
+            await Task.Run(() => p.WaitForExit());
             return result;
         }
         catch (Exception)
