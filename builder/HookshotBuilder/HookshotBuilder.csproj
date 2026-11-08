@@ -26,6 +26,7 @@
 
   <!-- all part of the .NET Framework itself: no extra files beside the exe -->
   <ItemGroup>
+    <Reference Include="Microsoft.CSharp" />
     <Reference Include="System.Net.Http" />
     <Reference Include="System.IO.Compression" />
     <Reference Include="System.IO.Compression.FileSystem" />
