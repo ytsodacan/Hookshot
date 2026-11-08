@@ -5,6 +5,9 @@
 #ifdef _WIN32
 #define VK_USE_PLATFORM_WIN32_KHR
 #define VKX_WIN32_SURFACE(X) X(vkCreateWin32SurfaceKHR)
+#elif defined(__APPLE__)
+#define VK_USE_PLATFORM_METAL_EXT
+#define VKX_WIN32_SURFACE(X)   /* SDL makes the Metal-backed surface */
 #else
 #define VKX_WIN32_SURFACE(X)   /* (linux: SDL makes the surface, host/posix/display_sdl.c) */
 #endif
